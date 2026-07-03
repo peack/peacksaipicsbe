@@ -1,0 +1,8 @@
+node_modules/
+dist/
+downloads/*
+!downloads/.gitkeep
+.env
+__pycache__/
+.venv/
+*.pyc
