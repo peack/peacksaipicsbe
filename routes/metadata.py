@@ -50,31 +50,39 @@ def get_item(item_id: int, _auth=Depends(auth)):
 @router.get("/search")
 def search(
     q: str = Query(..., min_length=1),
+    collection: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     _auth=Depends(auth),
 ):
-    with get_conn() as conn:
-        # FTS5 query: escape special chars and use prefix matching
-        fts_query = " OR ".join(f'"{w}"*' for w in q.split() if w)
-        if not fts_query:
-            raise HTTPException(status_code=400, detail="No valid search terms")
+    fts_query = " OR ".join(f'"{w}"*' for w in q.split() if w)
+    if not fts_query:
+        raise HTTPException(status_code=400, detail="No valid search terms")
 
+    collection_clause = ""
+    collection_params: list = []
+    if collection:
+        collection_clause = " AND i.path LIKE ?"
+        collection_params.append(f"{collection}/%")
+
+    with get_conn() as conn:
         rows = conn.execute(
-            """SELECT fts.rowid, fts.item_id, gm.prompt, gm.negative_prompt, i.path, i.source
+            f"""SELECT fts.rowid, fts.item_id, gm.prompt, gm.negative_prompt, i.path, i.source
                FROM generation_meta_fts fts
                JOIN generation_meta gm ON fts.item_id = gm.item_id
                JOIN items i ON i.id = gm.item_id
-               WHERE generation_meta_fts MATCH ?
+               WHERE generation_meta_fts MATCH ?{collection_clause}
                ORDER BY rank
                LIMIT ? OFFSET ?""",
-            (fts_query, limit, offset),
+            (fts_query, *collection_params, limit, offset),
         ).fetchall()
 
         count = conn.execute(
-            """SELECT COUNT(*) as cnt FROM generation_meta_fts
-               WHERE generation_meta_fts MATCH ?""",
-            (fts_query,),
+            f"""SELECT COUNT(*) as cnt FROM generation_meta_fts
+               JOIN generation_meta gm ON generation_meta_fts.item_id = gm.item_id
+               JOIN items i ON i.id = gm.item_id
+               WHERE generation_meta_fts MATCH ?{collection_clause}""",
+            (fts_query, *collection_params),
         ).fetchone()["cnt"]
 
     results = []
@@ -96,27 +104,32 @@ def search(
 def list_top_tags(
     tag_type: str | None = Query(None, alias="type"),
     exclude: str | None = Query(None),
+    collection: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     _auth=Depends(auth),
 ):
     conditions = []
     params = []
     if tag_type:
-        conditions.append("tag_type = ?")
+        conditions.append("t.tag_type = ?")
         params.append(tag_type)
     if exclude:
         excluded = [t.strip().lower() for t in exclude.split(",") if t.strip()]
         if excluded:
-            conditions.append(f"tag NOT IN ({','.join('?' for _ in excluded)})")
+            conditions.append(f"t.tag NOT IN ({','.join('?' for _ in excluded)})")
             params.extend(excluded)
+    if collection:
+        conditions.append("i.path LIKE ?")
+        params.append(f"{collection}/%")
     where = " AND ".join(conditions) if conditions else "1"
 
     with get_conn() as conn:
         rows = conn.execute(
-            f"""SELECT tag, tag_type, COUNT(*) as count
-                FROM item_tags
+            f"""SELECT t.tag, t.tag_type, COUNT(*) as count
+                FROM item_tags t
+                JOIN items i ON i.id = t.item_id
                 WHERE {where}
-                GROUP BY tag
+                GROUP BY t.tag
                 ORDER BY count DESC
                 LIMIT ?""",
             (*params, limit),
@@ -179,10 +192,24 @@ def get_tag(
 
 
 @router.get("/models")
-def list_models(_auth=Depends(auth)):
+def list_models(
+    collection: str | None = Query(None),
+    _auth=Depends(auth),
+):
+    collection_clause = ""
+    collection_params: list = []
+    if collection:
+        collection_clause = " AND i.path LIKE ?"
+        collection_params.append(f"{collection}/%")
+
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT model FROM generation_meta WHERE model IS NOT NULL AND model != '' ORDER BY model"
+            f"""SELECT DISTINCT gm.model
+                FROM generation_meta gm
+                JOIN items i ON i.id = gm.item_id
+                WHERE gm.model IS NOT NULL AND gm.model != ''{collection_clause}
+                ORDER BY gm.model""",
+            (*collection_params,),
         ).fetchall()
     return {"models": [r["model"] for r in rows]}
 
@@ -192,6 +219,7 @@ def list_items(
     model: str | None = Query(None),
     sampler: str | None = Query(None),
     source: str | None = Query(None),
+    collection: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     _auth=Depends(auth),
@@ -207,6 +235,9 @@ def list_items(
     if source:
         conditions.append("i.source = ?")
         params.append(source)
+    if collection:
+        conditions.append("i.path LIKE ?")
+        params.append(f"{collection}/%")
 
     where = " AND ".join(conditions) if conditions else "1"
 
