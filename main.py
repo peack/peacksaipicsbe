@@ -57,12 +57,18 @@ def is_image(path: Path) -> bool:
     return path.suffix.lower() in IMAGE_EXTS
 
 
-def safe_name(name: str) -> str:
-    """Last 3 chars of stem for short display, or full name for long."""
+def find_images(path: Path) -> list[Path]:
+    """Recursively collect all images under a directory."""
+    result: list[Path] = []
     try:
-        return name.encode("utf-8").decode("utf-8")
-    except Exception:
-        return name
+        for entry in path.iterdir():
+            if entry.is_dir():
+                result.extend(find_images(entry))
+            elif is_image(entry):
+                result.append(entry)
+    except PermissionError:
+        pass
+    return sorted(result, key=lambda x: x.name)
 
 
 # ── Routes ──────────────────────────────────────────────────────────────
@@ -82,10 +88,7 @@ def list_collections(_auth=Depends(auth)):
     for entry in sorted(ROOT.iterdir()):
         if not entry.is_dir():
             continue
-        images = sorted(
-            [f for f in entry.iterdir() if is_image(f)],
-            key=lambda x: x.name,
-        )
+        images = find_images(entry)
         if not images:
             continue
 
@@ -94,7 +97,7 @@ def list_collections(_auth=Depends(auth)):
                 "name": entry.name,
                 "path": str(entry.relative_to(ROOT)),
                 "image_count": len(images),
-                "cover": f"/api/images?path={entry.relative_to(ROOT)}/{images[0].name}",
+                "cover": f"/api/images?path={images[0].relative_to(ROOT)}",
             }
         )
 
@@ -110,10 +113,7 @@ def list_collection_images(name: str, _auth=Depends(auth)):
     if not folder.exists() or not folder.is_dir():
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    images = sorted(
-        [f for f in folder.iterdir() if is_image(f)],
-        key=lambda x: x.name,
-    )
+    images = find_images(folder)
 
     return JSONResponse(
         {
