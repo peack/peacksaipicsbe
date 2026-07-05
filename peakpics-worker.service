@@ -1,0 +1,15 @@
+[Unit]
+Description=peakpics metadata worker
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/peacksaipicsbe
+EnvironmentFile=/home/pi/peacksaipicsbe/.env
+ExecStart=/home/pi/peacksaipicsbe/.venv/bin/python worker.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

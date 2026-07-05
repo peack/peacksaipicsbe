@@ -4,23 +4,20 @@ Serves a local directory tree as REST API, with folder=collection mapping.
 """
 from __future__ import annotations
 
-import os
 import mimetypes
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Query, Request, Depends
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-ROOT = Path(os.getenv("IMAGE_ROOT", "./downloads")).resolve()
-API_KEY = os.getenv("API_KEY", "")
-PORT = int(os.getenv("PORT", "8000"))
+from config import ROOT, API_KEY, PORT, IMAGE_EXTS
+from auth import auth
+from routes.metadata import router as metadata_router
 
 app = FastAPI(title="peakpicsbe", version="0.1.0")
 
@@ -32,23 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-security = HTTPBearer(auto_error=False)
-
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".svg"}
-
-
-# ── Auth ────────────────────────────────────────────────────────────────
-
-def auth(
-    api_key: Optional[str] = Query(default=None),
-    creds: Optional[HTTPAuthorizationCredentials] = Depends(security),
-):
-    """Require API key via ?api_key= or Authorization: Bearer <key>."""
-    if not API_KEY:
-        return  # no key configured = open
-    key = api_key or (creds.credentials if creds else None)
-    if key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+app.include_router(metadata_router)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
