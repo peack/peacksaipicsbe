@@ -71,6 +71,38 @@ def search(
     }
 
 
+@router.get("/tags")
+def list_top_tags(
+    tag_type: str | None = Query(None, alias="type"),
+    exclude: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    _auth=Depends(auth),
+):
+    conditions = []
+    params = []
+    if tag_type:
+        conditions.append("tag_type = ?")
+        params.append(tag_type)
+    if exclude:
+        excluded = [t.strip().lower() for t in exclude.split(",") if t.strip()]
+        if excluded:
+            conditions.append(f"tag NOT IN ({','.join('?' for _ in excluded)})")
+            params.extend(excluded)
+    where = " AND ".join(conditions) if conditions else "1"
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"""SELECT tag, tag_type, COUNT(*) as count
+                FROM item_tags
+                WHERE {where}
+                GROUP BY tag
+                ORDER BY count DESC
+                LIMIT ?""",
+            (*params, limit),
+        ).fetchall()
+    return {"tags": [dict(r) for r in rows]}
+
+
 @router.get("/tags/{tag}")
 def get_tag(
     tag: str,
