@@ -15,6 +15,7 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException, Query, Request, Depends
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 ROOT = Path(os.getenv("IMAGE_ROOT", "./downloads")).resolve()
@@ -22,6 +23,15 @@ API_KEY = os.getenv("API_KEY", "")
 PORT = int(os.getenv("PORT", "8000"))
 
 app = FastAPI(title="peakpicsbe", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 security = HTTPBearer(auto_error=False)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".svg"}
