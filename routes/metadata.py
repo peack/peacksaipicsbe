@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from db import get_conn
 from auth import auth
+from config import ROOT
 
 router = APIRouter(prefix="/api", tags=["metadata"])
+
+
+def _image_url(abs_path: str | None) -> str | None:
+    """Return a ready-to-use relative image URL (/api/images?path=<rel>) for a stored absolute path."""
+    if not abs_path:
+        return None
+    try:
+        rel = Path(abs_path).resolve().relative_to(ROOT)
+        return f"/api/images?path={rel.as_posix()}"
+    except ValueError:
+        return None
 
 
 @router.get("/items/{item_id}")
@@ -27,6 +41,7 @@ def get_item(item_id: int, _auth=Depends(auth)):
         ).fetchall()
 
     result = dict(item)
+    result["url"] = _image_url(result.get("path"))
     result["generation_meta"] = dict(meta) if meta else None
     result["tags"] = [dict(t) for t in tags]
     return result
@@ -62,12 +77,18 @@ def search(
             (fts_query,),
         ).fetchone()["cnt"]
 
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["url"] = _image_url(d.get("path"))
+        results.append(d)
+
     return {
         "query": q,
         "total": count,
         "offset": offset,
         "limit": limit,
-        "results": [dict(r) for r in rows],
+        "results": results,
     }
 
 
@@ -141,13 +162,19 @@ def get_tag(
                 (tag.lower(),),
             ).fetchone()[0]
 
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["url"] = _image_url(d.get("path"))
+        results.append(d)
+
     return {
         "tag": tag,
         "tag_type": tag_type,
         "total": count,
         "offset": offset,
         "limit": limit,
-        "results": [dict(r) for r in rows],
+        "results": results,
     }
 
 
@@ -203,9 +230,15 @@ def list_items(
             params,
         ).fetchone()[0]
 
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["url"] = _image_url(d.get("path"))
+        results.append(d)
+
     return {
         "total": count,
         "offset": offset,
         "limit": limit,
-        "results": [dict(r) for r in rows],
+        "results": results,
     }

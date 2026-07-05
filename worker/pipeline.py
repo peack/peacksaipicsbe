@@ -79,8 +79,6 @@ def process_file(path: str) -> None:
         tag_rows = []
         for tag in tokenize_prompt(meta.prompt):
             tag_rows.append((item_id, tag, "prompt"))
-        for tag in tokenize_prompt(meta.negative_prompt):
-            tag_rows.append((item_id, tag, "prompt"))
         if meta.model:
             tag_rows.append((item_id, meta.model.lower(), "model"))
         if meta.sampler:
