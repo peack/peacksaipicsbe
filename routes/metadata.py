@@ -63,7 +63,7 @@ def search(
     collection_params: list = []
     if collection:
         collection_clause = " AND i.path LIKE ?"
-        collection_params.append(f"{collection}/%")
+        collection_params.append(f"{ROOT / collection}/%")
 
     with get_conn() as conn:
         rows = conn.execute(
@@ -120,7 +120,7 @@ def list_top_tags(
             params.extend(excluded)
     if collection:
         conditions.append("i.path LIKE ?")
-        params.append(f"{collection}/%")
+        params.append(f"{ROOT / collection}/%")
     where = " AND ".join(conditions) if conditions else "1"
 
     with get_conn() as conn:
@@ -200,7 +200,7 @@ def list_models(
     collection_params: list = []
     if collection:
         collection_clause = " AND i.path LIKE ?"
-        collection_params.append(f"{collection}/%")
+        collection_params.append(f"{ROOT / collection}/%")
 
     with get_conn() as conn:
         rows = conn.execute(
@@ -237,7 +237,7 @@ def list_items(
         params.append(source)
     if collection:
         conditions.append("i.path LIKE ?")
-        params.append(f"{collection}/%")
+        params.append(f"{ROOT / collection}/%")
 
     where = " AND ".join(conditions) if conditions else "1"
 
